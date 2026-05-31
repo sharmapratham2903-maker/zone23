@@ -322,7 +322,7 @@
         <div class="tile"><div class="k">next reward</div><div class="v pix" id="ccNext">D3</div></div>
       </div>
       <button class="cta pix" id="ccCta">LOG TODAY ▸</button>
-      <div class="ccbtns"><button id="ccChar"><span class="bi">🥊</span>CHARACTER</button><button id="ccGif"><span class="bi">📺</span>GIFS</button><button id="ccGuide"><span class="bi" style="font-family:'Press Start 2P';font-size:11px">?</span>HOW TO PLAY</button></div>
+      <div class="ccbtns"><button id="ccChar"><span class="bi">🥊</span>CHARACTER</button><button id="ccGif"><span class="bi">📺</span>GIFS</button><button id="ccGuide"><span class="bi" style="font-family:'Press Start 2P';font-size:11px">?</span>HOW TO PLAY</button><button id="ccData"><span class="bi">💾</span>DATA</button></div>
     </div>
     <div class="legend"><span><b>■</b> won</span><span><b>□✕</b> lost</span><span>🎁 reward</span><span>🏆 ultimate</span><span>★ flawless</span></div>
     <div id="board"></div>
@@ -364,7 +364,9 @@
 <div class="toast pix" id="toast"></div>
 
 <script>
-const KEY='z1_zone23_v6';const mem={};
+const KEY='z1_zone23';const mem={};
+/* one-time migration: older builds used a versioned key (z1_zone23_vN). If the stable key is empty, adopt the newest versioned key's data so app updates never wipe progress. */
+(function migrateLegacy(){try{if(localStorage.getItem(KEY))return;var best=null,bestV=-1;for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);var m=k&&k.match(/^z1_zone23_v(\d+)$/);if(m){var v=+m[1],val=localStorage.getItem(k);if(val&&v>bestV){bestV=v;best=val;}}}if(best)localStorage.setItem(KEY,best);}catch(e){}})();
 const store={get(){try{const r=localStorage.getItem(KEY);return r?JSON.parse(r):null;}catch(e){return mem[KEY]||null;}},set(o){try{localStorage.setItem(KEY,JSON.stringify(o));}catch(e){mem[KEY]=o;return false;}return true;}};
 let _db=null;
 function idbOpen(){return new Promise((res,rej)=>{if(_db)return res(_db);let r;try{r=indexedDB.open('z1db',1);}catch(e){return rej(e);}r.onupgradeneeded=()=>{r.result.createObjectStore('kv');};r.onsuccess=()=>{_db=r.result;res(_db);};r.onerror=()=>rej(r.error);});}
@@ -792,6 +794,48 @@ function gifManager(){
   document.querySelectorAll('[data-gifup]').forEach(l=>l.onclick=()=>{const key=l.dataset.gifup,fi=document.createElement('input');fi.type='file';fi.accept='image/gif,image/*,video/mp4';fi.onchange=()=>{const f=fi.files[0];if(!f)return;if(f.size>6000000){toast('TOO BIG (keep under 6MB)');return;}toast('SAVING…');const rd=new FileReader();rd.onload=()=>{S.gifs[key].push(rd.result);saveGifs().then(ok=>toast(ok?'SAVED ✓':'SAVE FAILED — TRY AGAIN'));gifManager();};rd.readAsDataURL(f);};fi.click();});
 }
 
+/* ---------- DATA: backup / restore ---------- */
+function exportData(){
+  toast('PREPARING BACKUP…');
+  var state=Object.assign({},S);delete state.gifs;delete state.rewardImgs;
+  Promise.all([idbGet('gifs'),idbGet('rewardImgs')]).then(function(res){
+    var payload={app:'zone23',format:1,exportedAt:new Date().toISOString(),day:S.activeDay,state:state,gifs:res[0]||{good:[],bad:[]},rewardImgs:res[1]||{}};
+    var blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download='zone23-day'+S.activeDay+'-'+isoOf(new Date())+'.json';
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1500);
+    toast('BACKUP SAVED ✓');
+  }).catch(function(){toast('EXPORT FAILED — TRY AGAIN');});
+}
+function applyImport(p){
+  if(!p||!p.state){toast('NOT A VALID BACKUP');return;}
+  store.set(p.state);
+  Promise.all([idbSet('gifs',p.gifs||{good:[],bad:[]}),idbSet('rewardImgs',p.rewardImgs||{})])
+    .then(function(){toast('RESTORED ✓ RELOADING…');setTimeout(function(){location.reload();},700);})
+    .catch(function(){toast('RESTORED ✓ RELOADING…');setTimeout(function(){location.reload();},700);});
+}
+function importData(){
+  var fi=document.createElement('input');fi.type='file';fi.accept='application/json,.json';
+  fi.onchange=function(){var f=fi.files[0];if(!f)return;var rd=new FileReader();
+    rd.onload=function(){var p;try{p=JSON.parse(rd.result);}catch(e){toast('FILE NOT READABLE');return;}
+      var when=p.exportedAt?(' from '+String(p.exportedAt).slice(0,10)):'';var d=p.day?(' · Day '+p.day):'';
+      confirmModal('Restore this backup'+when+d+'? This replaces ALL current progress, money and clips on this device. Your backup file stays safe.',function(){applyImport(p);});
+    };rd.readAsText(f);};
+  fi.click();
+}
+function dataManager(){
+  showModal('<h3>💾 BACKUP / RESTORE</h3>'
+   +'<p style="font-size:15px">Your run already saves automatically on this device and now survives app updates. Use this to keep a backup file or move to another phone.</p>'
+   +'<div class="modal-btns" style="flex-direction:column;gap:8px;align-items:stretch"><button class="solid" id="dExp">⬇ EXPORT — download backup file</button><label class="upbtn" id="dImp" style="margin:0">⬆ IMPORT — restore from a backup file</label></div>'
+   +'<p style="font-size:13px;color:var(--dim);margin-top:10px">Tip: export after a big update and keep the file in Drive or your repo as a snapshot.</p>'
+   +'<div class="modal-btns"><button class="ghost" id="mClose">CLOSE</button></div>');
+  document.getElementById('dExp').onclick=exportData;
+  document.getElementById('dImp').onclick=importData;
+  document.getElementById('mClose').onclick=hideModal;
+}
+
 /* ---------- guide ---------- */
 function guideModal(){
   showModal('<h3>HOW TO PLAY · Z1</h3>'
@@ -886,6 +930,7 @@ document.getElementById('fab').onclick=quickExpense;
 document.getElementById('ccChar').onclick=charManager;
 document.getElementById('ccGif').onclick=gifManager;
 document.getElementById('ccGuide').onclick=guideModal;
+document.getElementById('ccData').onclick=dataManager;
 function updateHeader(){const left=(S.rollBudget||dailyBase())-discretionary(S.draft);document.getElementById('walletAmt').innerHTML='₹'+left+'<small>food left today</small>';document.getElementById('hDay').textContent='DAY '+S.activeDay;document.getElementById('hDate').textContent=fmt(S.activeDay);}
 function renderAll(){S.viewDay=S.activeDay;renderLog();updateHeader();}
 let tT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(tT);tT=setTimeout(()=>t.style.display='none',1800);}
