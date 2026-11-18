@@ -8343,6 +8343,26 @@ function addPlay(sec){
   var a=AR(),t=Z4.today();a.pt[t]=(a.pt[t]||0)+Math.max(0,Math.round(sec));
   Object.keys(a.pt).sort().slice(0,-90).forEach(function(k){delete a.pt[k];});save();   /* kept 90 days now: RECORD charts it */
 }
+/* game time is counted only while the app is on screen, banked every 30 s and the moment the app is hidden or closed,
+   so leaving mid-game (home, lock, another app, iOS reloading the page) keeps the minutes already played.
+   A gap longer than 45 s between two counts means the phone slept or the page froze: none of that is counted. */
+var PT_EVERY=30000,PT_GAP=45000;
+function meter(){
+  var mark=document.hidden?0:performance.now(),carry=0,over=false;
+  function bank(){
+    if(!mark)return;var n=performance.now();carry+=Math.min(Math.max(0,n-mark),PT_GAP);mark=n;
+    var s=Math.floor(carry/1000);if(s>0){carry-=s*1000;addPlay(s);}
+  }
+  function vis(){if(document.hidden){bank();mark=0;}else if(!over&&!mark)mark=performance.now();}
+  function hide(){bank();mark=0;}
+  function show(){if(!over&&!document.hidden&&!mark)mark=performance.now();}
+  document.addEventListener('visibilitychange',vis);window.addEventListener('pagehide',hide);window.addEventListener('pageshow',show);
+  var iv=setInterval(bank,PT_EVERY);
+  return function stop(){
+    if(over)return;over=true;bank();if(carry>=500)addPlay(1);carry=0;mark=0;clearInterval(iv);
+    document.removeEventListener('visibilitychange',vis);window.removeEventListener('pagehide',hide);window.removeEventListener('pageshow',show);
+  };
+}
 function alarmNow(){try{return Z4.alarm();}catch(e){return null;}}
 /* the games are a break, not a hiding place: a quiet line when the day has gone to them, or the hunt has gone dry (never during an urge) */
 function warnHTML(){
@@ -8365,10 +8385,10 @@ function hub(){
 function play(id){
   var g=gameById(id);if(!g){hub();return;}
   if(!SES)SES={kind:'break',ts:Z4.now(),hr:new Date(Z4.now()).getHours(),d:Z4.today(),played:0};
-  SES.played++;SES.last=id;var t0=Date.now(),fin=false;
-  g.run(function(res){if(!fin){fin=true;addPlay((Date.now()-t0)/1000);}checkout(res||{g:id});});
-  /* registered after the game has drawn itself, so closing with the X still counts the minutes */
-  OV.c.push(function(){if(!fin){fin=true;addPlay((Date.now()-t0)/1000);}});
+  SES.played++;SES.last=id;var stop=meter();
+  g.run(function(res){stop();checkout(res||{g:id});});
+  /* registered after the game has drawn itself, so closing with the X (or any way out) banks the rest */
+  OV.c.push(stop);
 }
 function logUrge(res){
   var s=SES||{ts:Z4.now(),hr:new Date(Z4.now()).getHours(),d:Z4.today()};
