@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="p33-build" content="18.9|2026-11-19 05:52:51">
+<meta name="p33-build" content="18.11|2026-11-19 06:24:02">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -2438,6 +2438,25 @@ button.dstamp{cursor:pointer;}
 @keyframes nstin{from{transform:translate(-50%,-50%) rotate(-6deg) scale(1.8);opacity:0;}to{transform:translate(-50%,-50%) rotate(-6deg) scale(1);opacity:1;}}
 @keyframes nstout{to{transform:translate(-50%,-50%) rotate(-6deg) scale(.86);opacity:0;}}
 @media (prefers-reduced-motion:reduce){.nstamp,.nstamp.out{animation:none !important;}}
+/* ---- 19 Nov 06:09: the dojo about 30% bigger. The stage keeps the picture's 4:3 and takes the width the side cards give up
+   (64 -> 56 px); the four pillar cards become two tall pillars a side, filling the stage's height ---- */
+.r4dojo .dojowrap{gap:6px;align-items:stretch;}
+.r4dojo .domcol{width:56px;justify-content:stretch;gap:8px;}
+.r4dojo .domslot{flex:1 1 0;justify-content:center;gap:4px;padding:6px 1px 5px;min-height:0;}
+.r4dojo .domslot .dn{letter-spacing:.5px;}
+/* the pictures (idle, punch, hit, ultimate, entrance) all sit on a 500x375 canvas with 45-55 px of nothing at the sides:
+   the stage frames only the drawn part (x 44..445, y 0..365 of every frame), so the dojo itself fills it */
+.r4dojo .dojostage{min-height:0;aspect-ratio:402/366;align-self:center;overflow:hidden;display:block;}
+.r4dojo .dojostage img{position:absolute;left:-10.945%;top:0;width:124.378%;height:auto;max-width:none;object-fit:fill;}
+@media (max-width:350px){.r4dojo .domcol{width:48px;gap:6px;}.r4dojo .domslot{gap:3px;padding:5px 1px 4px;}.r4dojo .domslot svg{width:24px;height:24px;}}
+.fbrow{gap:4px;}
+/* ---- 19 Nov 06:20: on tall phones the cash pile and the pig grow too, so the bank's block is not mostly empty ---- */
+@media (min-height:780px){
+  #fundBody .fart{width:98px;}
+  #fundBody .fpig{width:86px;}
+  #fundBody .fcard .fbody{padding:12px 12px;gap:14px;}
+  #fundBody .fbart{gap:10px;}
+}
 
 
   </style>
@@ -5530,7 +5549,7 @@ function cleanStats(){
   var t=today(),out={};
   CLP.forEach(function(P){
     var seq=[],k;for(k=S.r.start;k<=t;k=addDays(k,1))seq.push({k:k,v:cleanOf(k)[P.k]});
-    var n=seq.length,tv=n?seq[n-1].v:0,end=tv===0?n-1:n,H=70,run=0,best=0,slips=0,broke=0,cost=0,clean=0,falls=[],i,j,l6;
+    var n=seq.length,tv=n?seq[n-1].v:0,end=Math.max(0,tv===0?n-1:n),H=70,run=0,best=0,slips=0,broke=0,cost=0,clean=0,falls=[],i,j,l6;
     for(i=0;i<end;i++){
       l6=0;for(j=Math.max(0,i-6);j<i;j++)if(seq[j].v!==1)l6++;
       if(seq[i].v===1){run++;clean++;if(run>best)best=run;H=Math.min(100,H+(l6>=2?4:7));cost=0;}
@@ -5541,7 +5560,7 @@ function cleanStats(){
     var bs=stageOf(BST,Math.round(H)),toNext=0;
     if(bs.next){var arr=seq.slice(0,end).map(function(x){return x.v;}),h=H;
       for(var d=1;d<=90;d++){l6=0;for(j=Math.max(0,arr.length-6);j<arr.length;j++)if(arr[j]!==1)l6++;h=Math.min(100,h+(l6>=2?4:7));arr.push(1);if(Math.round(h)>=bs.next[0]){toNext=d;break;}}}
-    out[P.k]={run:run,best:best,slips:slips,l7:l7,H:Math.round(H),fallen:run?0:broke,today:tv,cost:cost,judged:end,last:end?seq[end-1].v:0,
+    out[P.k]={run:run,best:best,slips:slips,l7:l7,H:Math.round(H),fallen:run?0:broke,today:tv,cost:cost,judged:end,last:end>0?seq[end-1].v:0,
       clean:clean,falls:falls,toNext:toNext,lost:falls.filter(function(x){return x.run>0;}).length,
       days:seq.slice(-14).map(function(x){return{k:x.k,v:x.v,t:x.k===t};}),
       all:seq.map(function(x){return{k:x.k,v:x.v,t:x.k===t};})};
@@ -9014,7 +9033,10 @@ function fitFund(){
 function sizeBank(){
   var a=document.querySelector('#fBank .fbart'),row=document.querySelector('#fBank .fbrow'),dt=document.querySelector('#fBank .fbdo'),c=document.querySelector('#fBank .fbcrop');
   if(!a||!row||!c)return;
-  var H=a.clientHeight-(dt?dt.offsetHeight:0)-18,W=row.clientWidth,bw=Math.max(36,Math.floor(Math.min(W*0.38,H*458/518,220))),bh=Math.round(bw*518/458);
+  /* 19 Nov 06:20: the bank takes all the width the two logo columns can spare (each keeps 24% of the row, 70 to 96 px), up to
+     300 px; the height left still has the last word on short screens */
+  var H=a.clientHeight-(dt?dt.offsetHeight:0)-18,W=row.clientWidth,side=Math.max(70,Math.min(96,W*0.24)),
+      bw=Math.max(36,Math.floor(Math.min(W-2*side-8,H*458/518,300))),bh=Math.round(bw*518/458);
   c.style.width=bw+'px';row.style.setProperty('--bh',bh+'px');row.classList.toggle('tight',bh<125);   /* small phones: no caret, so an open card still fits */
 }
 Z4.fitFund=fitFund;
